@@ -30,6 +30,8 @@ except ImportError:
     os.environ['TCL_LIBRARY'] = '{}/tcl/tcl8.5'.format(sys.prefix)
     pass
 import matplotlib.pyplot as plt
+from matplotlib.widgets import LassoSelector
+from matplotlib.path import Path
 
 import numpy as np
 from collections import OrderedDict
@@ -286,7 +288,7 @@ class MainWindow(QMainWindow):
             data = np.genfromtxt(fname, skip_header=26, usecols=use_columns)
             if used_only:
                 data = data[data[::,6] == 0]
-            data = data[:,[0,1,2,3,4]]
+            data = data[:,[0,1,2,3,4,5]]
         elif ext == '.sortav':
             if not use_columns:
                 use_columns = (0,1,2,3,6)
@@ -317,8 +319,12 @@ class MainWindow(QMainWindow):
         '''
          TO_CHECK: can loops be merged?
         '''
+        use_stl = False
         for r in data:
             h, k, l, Io, Is = r[:5]
+            if len(r) == 6:
+                use_stl = True
+                stl = r[5]
             hkl = tuple(np.unique(np.array([h,k,l]).dot(self.SymOp), axis=0)[0])
             if hkl in HKL:
                 if key_Io in HKL[hkl]:
@@ -328,7 +334,10 @@ class MainWindow(QMainWindow):
                     HKL[hkl][key_Io] = [Io]
                     HKL[hkl][key_Is] = [Is]
             else:
-                HKL[hkl] = {key_Io:[Io], key_Is:[Is]}
+                if use_stl:
+                    HKL[hkl] = {key_Io:[Io], key_Is:[Is], 'stl':stl}
+                else:
+                    HKL[hkl] = {key_Io:[Io], key_Is:[Is]}
     
     def calculate_statistics(self):
         logging.info(self.__class__.__name__)
@@ -338,6 +347,7 @@ class MainWindow(QMainWindow):
         rIsig = []
         rIstd = []
         hkl   = []
+        stl   = []
         for (h,k,l) in self.HKL_1:
             if (h,k,l) in self.HKL_2:
                 Io_mean_1 = np.mean(self.HKL_1[(h,k,l)]['Io_1'])
@@ -348,6 +358,8 @@ class MainWindow(QMainWindow):
                 Io_std_2  = np.std(self.HKL_2[(h,k,l)]['Io_2'])
                 Is_mean_1 = np.mean(self.HKL_1[(h,k,l)]['Is_1'])
                 Is_mean_2 = np.mean(self.HKL_2[(h,k,l)]['Is_2'])
+                if 'stl' in self.HKL_1[(h,k,l)]:
+                    stl.append(self.HKL_1[(h,k,l)]['stl'])
                 multi.append((len(self.HKL_1[(h,k,l)]['Io_1']), len(self.HKL_2[(h,k,l)]['Io_2'])))
                 meaIo.append((Io_mean_1, Io_mean_2))
                 medIo.append((Io_medi_1, Io_medi_2))
@@ -363,6 +375,7 @@ class MainWindow(QMainWindow):
         self.rIsig = np.asarray(rIsig)
         self.rIstd = np.asarray(rIstd)
         self.hkl   = np.asarray(hkl)
+        self.stl   = np.asarray(stl)
     
     def plot_data(self):
         logging.info(self.__class__.__name__)
@@ -380,7 +393,10 @@ class MainWindow(QMainWindow):
         mpl.rcParams['figure.titlesize'] = 12
         
         fig = plt.figure()
-        grid = plt.GridSpec(7, 13, wspace=0.0, hspace=0.0)
+        if self.stl.size:
+            grid = plt.GridSpec(12, 13, wspace=0.0, hspace=0.0)
+        else:
+            grid = plt.GridSpec(7, 13, wspace=0.0, hspace=0.0)
         fig.subplots_adjust(left=0.08, right=0.98, top=0.9, bottom=0.08, wspace=0.0, hspace=0.0)
         
         sigcut = _SIGCUT
@@ -396,11 +412,22 @@ class MainWindow(QMainWindow):
         f1cut = f1[(rIsig[:,0] > sigcut) & (rIsig[:,1] > sigcut)]
         f2cut = f2[(rIsig[:,0] > sigcut) & (rIsig[:,1] > sigcut)]
         
-        p00 = fig.add_subplot(grid[ :2,  :6])
-        p01 = fig.add_subplot(grid[ :2, 7: ])
-        p1x = fig.add_subplot(grid[3:6, 1: ])
-        h11 = fig.add_subplot(grid[3:6, 0  ], sharey=p1x)
-        h2x = fig.add_subplot(grid[6  , 1: ], sharex=p1x)
+        if self.stl.size:
+            p00 = fig.add_subplot(grid[ :2 ,  :6])
+            p01 = fig.add_subplot(grid[ :2 , 7: ])
+            p1x = fig.add_subplot(grid[3:6 , 1: ])
+            h1y = fig.add_subplot(grid[3:6 , 0  ], sharey=p1x)
+            h1x = fig.add_subplot(grid[6   , 1: ], sharex=p1x)
+            p2x = fig.add_subplot(grid[8:11, 1: ])
+            h2y = fig.add_subplot(grid[8:11, 0  ], sharey=p2x)
+            h2x = fig.add_subplot(grid[11  , 1: ], sharex=p2x)
+            mpl.rcParams['figure.figsize'] = [13.66, 10.24]
+        else:
+            p00 = fig.add_subplot(grid[ :2,  :6])
+            p01 = fig.add_subplot(grid[ :2, 7: ])
+            p1x = fig.add_subplot(grid[3:6, 1: ])
+            h1y = fig.add_subplot(grid[3:6, 0  ], sharey=p1x)
+            h1x = fig.add_subplot(grid[6  , 1: ], sharex=p1x)
         
         p00.scatter(f1cut, f2cut, s=4, color='#37A0CB')
         p00.plot([0, np.nanmax(f1cut)],[0, np.nanmax(f1cut)], 'k-', lw=1.0)
@@ -423,31 +450,56 @@ class MainWindow(QMainWindow):
         y = (f1cut - f2cut)/(facut)
         
         #p1x.set_title(r'$\frac{I_o(\#1)}{I_o(\#2)}\ vs\ \log(I_o(\#1))$')
-        p1x.scatter(x, y, s=4, alpha=0.5, picker=4, color='#37A0CB')
+        p1x_sc = p1x.scatter(x, y, s=20, alpha=0.5, picker=True, color='#37A0CB')
         p1x.plot([np.min(x), np.max(x)], [0,0], 'k-', lw=1.0)
-        
         p1x.spines['left'].set_visible(False)
         p1x.spines['bottom'].set_visible(False)
+        p1x.xaxis.set_visible(False)
+        p1x.yaxis.set_visible(False)
         #p1x.axis('off')
         #p1x.set_ylim([-2.0, 2.0])
         
-        h11.hist(y[(~np.isnan(y)) & (y<2.) & (y>-2.)], 400, color='#003e5c', histtype='stepfilled', orientation='horizontal')
-        #h11.set_ylim([-2.0, 2.0])
-        h11.xaxis.set_visible(False)
-        h11.invert_xaxis()
-        h11.spines['top'].set_visible(False)
-        h11.spines['bottom'].set_visible(False)
-        #h11.spines['right'].set_visible(False)
-        #h11.set_ylabel(r'$I_o(\#1)\ /\ I_o(\#2)$')
-        h11.set_ylabel(r'$(I_{1}\ -\ I_{2})\ /\ \left<I_{1,2}\right>$')
+        if self.stl.size:
+            stl = self.stl[(rIsig[:,0] > sigcut) & (rIsig[:,1] > sigcut)]
+            #p2x.set_title(r'$\frac{I_o(\#1)}{I_o(\#2)}\ vs\ \log(I_o(\#1))$')
+            p2x.scatter(stl, y, s=20, alpha=0.5, picker=True, color='#37A0CB')
+            p2x.plot([np.min(stl), np.max(stl)], [0,0], 'k-', lw=1.0)
+            p2x.set_ylabel(r'$(I_{1}\ -\ I_{2})\ /\ \left<I_{1,2}\right>$')
+            p2x.set_xlabel(r'$sin(\left(\theta\right>)/\lambda$')
+            p2x.spines['left'].set_visible(False)
+            p2x.yaxis.set_visible(False)
+            
+            h2y.hist(y[(~np.isnan(y)) & (y<2.) & (y>-2.)], 400, color='#003e5c', histtype='stepfilled', orientation='horizontal')
+            h2y.xaxis.set_visible(False)
+            h2y.invert_xaxis()
+            h2y.spines['top'].set_visible(False)
+            h2y.spines['bottom'].set_visible(False)
+            h2y.set_ylabel(r'$(I_{1}\ -\ I_{2})\ /\ \left<I_{1,2}\right>$')
         
-        h2x.hist(x[~np.isnan(x)], 400, color='#003e5c', histtype='stepfilled', orientation='vertical')
-        h2x.yaxis.set_visible(False)
-        #h2x.spines['top'].set_visible(False)
-        h2x.spines['left'].set_visible(False)
-        h2x.spines['right'].set_visible(False)
-        h2x.invert_yaxis()
-        h2x.set_xlabel(r'$\log(\left<I_{1,2}\right>)$')
+            h2x.hist(stl[~np.isnan(stl)], 400, color='#003e5c', histtype='stepfilled', orientation='vertical')
+            h2x.yaxis.set_visible(False)
+            h2x.spines['left'].set_visible(False)
+            h2x.spines['right'].set_visible(False)
+            h2x.invert_yaxis()
+            h2x.set_xlabel(r'$\log(\left<I_{1,2}\right>)$')
+            
+        h1y.hist(y[(~np.isnan(y)) & (y<2.) & (y>-2.)], 400, color='#003e5c', histtype='stepfilled', orientation='horizontal')
+        #h1y.set_ylim([-2.0, 2.0])
+        h1y.xaxis.set_visible(False)
+        h1y.invert_xaxis()
+        h1y.spines['top'].set_visible(False)
+        h1y.spines['bottom'].set_visible(False)
+        #h1y.spines['right'].set_visible(False)
+        #h1y.set_ylabel(r'$I_o(\#1)\ /\ I_o(\#2)$')
+        h1y.set_ylabel(r'$(I_{1}\ -\ I_{2})\ /\ \left<I_{1,2}\right>$')
+        
+        h1x.hist(x[~np.isnan(x)], 400, color='#003e5c', histtype='stepfilled', orientation='vertical')
+        h1x.yaxis.set_visible(False)
+        #h1x.spines['top'].set_visible(False)
+        h1x.spines['left'].set_visible(False)
+        h1x.spines['right'].set_visible(False)
+        h1x.invert_yaxis()
+        h1x.set_xlabel(r'$\log(\left<I_{1,2}\right>)$')
 
         if _SAVE:
             #name_1, ext = os.path.splitext(_FILE_1)
@@ -455,33 +507,51 @@ class MainWindow(QMainWindow):
             name_2 = os.path.split(os.path.split(_FILE_2)[0])[1]
             #name_2, ext = os.path.splitext(os.path.basename(_FILE_2))
             pname = '1{}_2{}_c{}_compare'.format(name_1, name_2, sigcut)
-            plt.savefig(pname + '.pdf', dpi=300)
-            plt.savefig(pname + '.png', dpi=300)
+            plt.savefig(pname + '.pdf', transparent=True)
+            plt.savefig(pname + '.png', dpi=600, transparent=True)
         
-        self.ann_hkl = None
+        from collections import defaultdict
+        self.annotations = defaultdict(list)
+        self.background = fig.canvas.copy_from_bbox(p1x.bbox)
         def on_pick(event):
-            '''
-             This will fail if a new plot is shown, the first will index into the wrong self.hkl
-             solution: index plots and index into a list of self.hkl lists
-            '''
-            if event.mouseevent.button == 3 and self.ann_hkl is not None:
-                self.ann_hkl.remove()
-                self.ann_hkl = None
-                plt.draw()
-                return
-                
-            xdata = event.mouseevent.xdata
-            ydata = event.mouseevent.ydata
             x = event.mouseevent.x
             y = event.mouseevent.y
-            ind = event.ind
-            h,k,l = map(int, self.hkl[(rIsig[:,0] > sigcut) & (rIsig[:,1] > sigcut)][ind][0])
-            if self.ann_hkl is not None:
-                self.ann_hkl.remove()
-                self.ann_hkl = None
-            self.ann_hkl = plt.annotate('hkl:({:3}{:3}{:3})'.format(h,k,l), xy=(x,y), xytext=(x,y), xycoords='figure pixels', textcoords='figure pixels',)
-            plt.draw()
+            ind = event.ind[0]
+            h,k,l = map(int, self.hkl[(rIsig[:,0] > sigcut) & (rIsig[:,1] > sigcut)][ind])
+            ann_name = '{:3}{:3}{:3}'.format(h,k,l)
             
+            if (event.mouseevent.button == 3 and len(self.annotations) > 0) or ann_name in self.annotations:
+                self.annotations[ann_name].remove()
+                self.annotations.pop(ann_name)
+                fig.canvas.draw_idle()
+                return
+                
+            self.annotations[ann_name] = plt.annotate(ann_name, xy=(x,y), size=8, xycoords='figure pixels')
+            print(ann_name)
+            #fig.canvas.draw_idle()
+            p1x.draw_artist(self.annotations[ann_name])
+        
+        def update_annot(ind, pos, but):
+            h,k,l = map(int, self.hkl[(rIsig[:,0] > sigcut) & (rIsig[:,1] > sigcut)][ind])
+            ann_name = '{:3}{:3}{:3}'.format(h,k,l)
+            
+            if ann_name in self.annotations:
+                if but == 3:
+                    self.annotations[ann_name].remove()
+                    self.annotations.pop(ann_name)
+                return
+            elif but == 1:
+                self.annotations[ann_name] = plt.annotate(ann_name, xy=pos, size=8, xycoords='figure pixels')
+                print(ann_name)
+            
+        def hover(event):
+            if event.inaxes == p1x:
+                cont, ind = p1x_sc.contains(event)
+                if cont:
+                    update_annot(ind["ind"][0], (event.x, event.y), event.button)
+                    fig.canvas.draw_idle()
+                    
+        fig.canvas.mpl_connect('motion_notify_event', hover)
         fig.canvas.mpl_connect('pick_event', on_pick)
         plt.show()
             
@@ -556,6 +626,62 @@ def main():
     ui.setWindowTitle('Compare SCXRD Data, {}'.format(_REVISION))
     ui.show()
     sys.exit(app.exec_())
+
+class SelectFromCollection(object):
+    """Select indices from a matplotlib collection using `LassoSelector`.
+
+    Selected indices are saved in the `ind` attribute. This tool fades out the
+    points that are not part of the selection (i.e., reduces their alpha
+    values). If your collection has alpha < 1, this tool will permanently
+    alter the alpha values.
+
+    Note that this tool selects collection objects based on their *origins*
+    (i.e., `offsets`).
+
+    Parameters
+    ----------
+    ax : :class:`~matplotlib.axes.Axes`
+        Axes to interact with.
+
+    collection : :class:`matplotlib.collections.Collection` subclass
+        Collection you want to select from.
+
+    alpha_other : 0 <= float <= 1
+        To highlight a selection, this tool sets all selected points to an
+        alpha value of 1 and non-selected points to `alpha_other`.
+    """
+
+    def __init__(self, ax, collection, alpha_other=0.3):
+        self.canvas = ax.figure.canvas
+        self.collection = collection
+        self.alpha_other = alpha_other
+
+        self.xys = collection.get_offsets()
+        self.Npts = len(self.xys)
+
+        # Ensure that we have separate colors for each object
+        self.fc = collection.get_facecolors()
+        if len(self.fc) == 0:
+            raise ValueError('Collection must have a facecolor')
+        elif len(self.fc) == 1:
+            self.fc = np.tile(self.fc, (self.Npts, 1))
+
+        self.lasso = LassoSelector(ax, onselect=self.onselect)
+        self.ind = []
+
+    def onselect(self, verts):
+        path = Path(verts)
+        self.ind = np.nonzero(path.contains_points(self.xys))[0]
+        self.fc[:, -1] = self.alpha_other
+        self.fc[self.ind, -1] = 1
+        self.collection.set_facecolors(self.fc)
+        self.canvas.draw_idle()
+
+    def disconnect(self):
+        self.lasso.disconnect_events()
+        self.fc[:, -1] = 1
+        self.collection.set_facecolors(self.fc)
+        self.canvas.draw_idle()
 
 if __name__ == '__main__':
     # Remove existing handlers, Python creates a
