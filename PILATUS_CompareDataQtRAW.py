@@ -321,7 +321,7 @@ class MainWindow(QMainWindow):
             h,k,l,Io,Is,r,f = refl
             #hkl = np.unique(np.array([h,k,l]).dot(self.SymOp), axis=0)[0]
             #M = tuple(np.concatenate([hkl,[f]]).astype(int))
-            M = (h,k,l,f)
+            M = (h,k,l,r)
             if M in HKL:
                 if key_Io in HKL[M]:
                     HKL[M][key_Io].append(Io)
@@ -358,7 +358,7 @@ class MainWindow(QMainWindow):
                 rIstd.append((Io_mean_1 / Io_std_1, Io_mean_2 / Io_std_2))
                 hkl.append(M)
             else:
-                print('> unmatched: ({:3}{:3}{:3}) {}'.format(int(h), int(k), int(l), self.HKL_1[M]))
+                print('> unmatched: ({:3}{:3}{:3}) {} {}'.format(int(h), int(k), int(l), f, self.HKL_1[M]))
 
         self.multi = np.asarray(multi)
         self.meaIo = np.asarray(meaIo)
