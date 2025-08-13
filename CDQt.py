@@ -16,7 +16,11 @@
 #   FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
 #   more details. <http://www.gnu.org/licenses/>
 #
-_REVISION = 'v2024-03-12'
+_REVISION = 'v2025-08-13'
+
+# todo:
+# - add support for .fcf files
+# - get rid of .ui file
 
 from PyQt6 import uic
 from PyQt6 import QtGui, QtWidgets, QtCore
@@ -103,34 +107,28 @@ class Worker(QtCore.QRunnable):
 
 class QLineEditDropHandler(QtCore.QObject):
     def __init__(self, parent=None):
-        logging.info(self.__class__.__name__)
         QtCore.QObject.__init__(self, parent)
-    
-    def valid_ext(self, ext):
-        #logging.info(self.__class__.__name__)
-        if ext in ['.raw', '.hkl', '.fco', '.fcf', '.vsf']:
-            return True
-        else:
-            return False
-        
+        logging.info(self.__class__.__name__)
+        self.valid_extensions = parent.valid_extensions
+
     def eventFilter(self, obj, event):
         #logging.info(self.__class__.__name__)
-        if event.type() == QtGui.QDragEnterEvent:
+        if event.type() == QtCore.QEvent.Type.DragEnter:
             md = event.mimeData()
             if md.hasUrls():
                 for url in md.urls():
                     filePath = url.toLocalFile()
                     root, ext = os.path.splitext(filePath)
-                    if self.valid_ext(ext):
+                    if ext in self.valid_extensions:
                         event.accept()
         
-        if event.type() == QtGui.QDropEvent:
+        if event.type() == QtCore.QEvent.Type.Drop:
             md = event.mimeData()
             if md.hasUrls():
                 for url in md.urls():
                     filePath = url.toLocalFile()
                     root, ext = os.path.splitext(filePath)
-                    if self.valid_ext(ext):
+                    if ext in self.valid_extensions:
                         obj.clear()
                         obj.setText(filePath)
                         obj.returnPressed.emit()
@@ -142,6 +140,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def __init__(self, *args, **kwargs):
         logging.info(self.__class__.__name__)
         super(MainWindow, self).__init__(*args, **kwargs)
+        self.valid_extensions = ['.raw', '.fco', '.hkl', '.sortav']
         self.homedir = os.path.dirname(__file__)
         uic.loadUi(os.path.join(self.homedir,'CDQt.ui'), self)
         self.setWindowFlags(self.windowFlags() | QtCore.Qt.WindowType.WindowStaysOnTopHint | QtCore.Qt.WindowType.WindowCloseButtonHint)
@@ -380,9 +379,12 @@ class MainWindow(QtWidgets.QMainWindow):
         self.data = self.data_1.merge(self.data_2, how='inner', on=['base','h','k','l'], suffixes=('_1','_2'), indicator=True)
         self.la_data_sym.setText(str(len(set(self.data['base']))))
         
-        self.data['stl'] = self.data[['stl_1', 'stl_2']].mean(axis=1)
-        self.data.drop(columns=['stl_1','stl_2'], inplace=True)
-        
+        if 'stl_1' not in self.data.columns and 'stl_2' not in self.data.columns:
+            self.use_stl = False
+        else:
+            self.data['stl'] = self.data[['stl_1', 'stl_2']].mean(axis=1)
+            self.data.drop(columns=['stl_1','stl_2'], inplace=True)
+
         self.ready_data = True
     
     def plot_data(self):
@@ -419,17 +421,20 @@ class MainWindow(QtWidgets.QMainWindow):
             grid = plt.GridSpec(7, 13, wspace=0.0, hspace=0.0)
         fig.subplots_adjust(left=0.08, right=0.98, top=0.9, bottom=0.08, wspace=0.0, hspace=0.0)
         
-        grouped = self.data.groupby(['base'])
-        f1cut = grouped['Fo_1'].transform(np.mean)
-        f2cut = grouped['Fo_2'].transform(np.mean)
-        
+        cond1 = self.data['Fo_1']/self.data['Fs_1'] > _SIGCUT
+        cond2 = self.data['Fo_2']/self.data['Fs_2'] > _SIGCUT
+        cut = self.data.where(cond1 & cond2)
+        grp = cut.groupby(['base'])
+        f1cut = grp['Fo_1'].transform('mean')
+        f2cut = grp['Fo_2'].transform('mean')
+
         sigcut = _SIGCUT
         scale = self.ds_scale.value()
         if _SCALE:
             scale = np.nansum(f1cut*f2cut)/np.nansum(np.square(f1cut))
         
         if _TITLE:
-            fig.suptitle('Scalefactor: {:6.3f}, cutoff: {}, symmetry: {}\n1: {}\n2: {}'.format(scale, sigcut, self.cb_sym.currentText(), _FILE_1, _FILE_2))
+            fig.suptitle('Scalefactor: {:6.3f}, cutoff: {} [data: {}], symmetry: {}\n1: {}\n2: {}'.format(scale, sigcut, cut['Fo_1'].count(), self.cb_sym.currentText(), _FILE_1, _FILE_2))
             fig.subplots_adjust(left=0.10, right=0.99, top=0.85, bottom=0.12)
         
         f1cut *= scale
@@ -519,14 +524,15 @@ class MainWindow(QtWidgets.QMainWindow):
         
         if _SAVE:
             pname = r'{}_{}_vs_{}_c{}_s{}'.format(_PREFIX, _LABEL_1.replace('\\', ''), _LABEL_2.replace('\\', ''), sigcut, scale)
-            plt.savefig(os.path.join(self.homedir, f'{pname}.png'), transparent=True)
+            fig.savefig(os.path.join(self.homedir, f'{pname}.png'), transparent=True)
+            #plt.savefig(os.path.join(self.homedir, f'{pname}.png'), transparent=True)
             #plt.savefig(pname + '.png', dpi=600, transparent=True)
         
-        plt.show()
+        fig.show()
 
     def clear_all(self):
-        self.le_data_1.setText('')
-        self.le_data_2.setText('')
+        self.le_data_1.clear()
+        self.le_data_2.clear()
         self.la_data_1.setText('-')
         self.la_data_2.setText('-')
         self.la_data_sym.setText('-')
@@ -537,6 +543,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.data_1 = None
         self.data_2 = None
         self.last_dir = None
+        self.tb_plot.setEnabled(False)
+        self.le_data_1.setEnabled(True)
+        self.le_data_2.setEnabled(True)
         
     def on_thread_result(self, r):
         logging.info(self.__class__.__name__)
