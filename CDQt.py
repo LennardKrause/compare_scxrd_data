@@ -3,7 +3,7 @@
 #
 #   CompareDataQt.py reads SCXRD data formats .raw, .hkl, .fcf and
 #   calculates the diff / mean vs. intensity values of equivalent observation.
-#   It currently reads SAINT .raw, XD2006 .fcf and general SHELX .hkl files.
+#   It currently reads SAINT .raw, XD2006 .fco and general SHELX .hkl files.
 #   Copyright (C) 2018, L.Krause <lkrause@chem.au.dk>, Aarhus University, DK.
 #
 #   This program is free software: you can redistribute it and/or modify it
@@ -16,11 +16,10 @@
 #   FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
 #   more details. <http://www.gnu.org/licenses/>
 #
-_REVISION = 'v2025-08-13'
+_REVISION = 'v2025-08-14'
 
 # todo:
 # - add support for .fcf files
-# - get rid of .ui file
 
 from PyQt6 import uic
 from PyQt6 import QtGui, QtWidgets, QtCore
@@ -794,3 +793,4 @@ if __name__ == '__main__':
     # create logger
     logging.basicConfig(level=logging.INFO, format='%(message)20s > %(funcName)s')
     main()
+
