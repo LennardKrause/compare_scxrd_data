@@ -21,22 +21,16 @@ _REVISION = 'v2025-08-14'
 # todo:
 # - add support for .fcf files
 
-from PyQt6 import uic
-from PyQt6 import QtGui, QtWidgets, QtCore
 
-import matplotlib as mpl
-try:
-    mpl.use('Qt5Agg')
-except ImportError:
-    os.environ['TCL_LIBRARY'] = '{}/tcl/tcl8.5'.format(sys.prefix)
-    pass
-import matplotlib.pyplot as plt
-from matplotlib.widgets import LassoSelector
-from matplotlib.path import Path
-
+import os
+import sys
+import traceback
+import logging
 import numpy as np
 import pandas as pd
-import os, sys, traceback, logging
+from PyQt6 import QtWidgets, QtCore
+import matplotlib as mpl
+import matplotlib.pyplot as plt
 
 class WorkerSignals(QtCore.QObject):
     '''
@@ -146,10 +140,8 @@ class MainWindow(QtWidgets.QMainWindow):
         
         self.le_data_1.installEventFilter(QLineEditDropHandler(self))
         self.le_data_2.installEventFilter(QLineEditDropHandler(self))
-        self.le_data_1.returnPressed.connect(lambda: self.prepare_read_data(self.le_data_1.text(), self.le_data_1, self.ready_data_1))
-        self.le_data_1.returnPressed.connect(lambda: self.update_last_dir(self.le_data_1.text()))
-        self.le_data_2.returnPressed.connect(lambda: self.prepare_read_data(self.le_data_2.text(), self.le_data_2, self.ready_data_2))
-        self.le_data_2.returnPressed.connect(lambda: self.update_last_dir(self.le_data_2.text()))
+        self.le_data_1.returnPressed.connect(lambda: self.prepare_read_data_1(self.le_data_1.text()))
+        self.le_data_2.returnPressed.connect(lambda: self.prepare_read_data_2(self.le_data_2.text()))
         self.tb_plot.clicked.connect(self.plot_data)
         self.tb_data_1.clicked.connect(lambda: self.open_file_browser(self.le_data_1))
         self.tb_data_2.clicked.connect(lambda: self.open_file_browser(self.le_data_2))
@@ -163,7 +155,12 @@ class MainWindow(QtWidgets.QMainWindow):
         self.data_1 = None
         self.data_2 = None
         self.data = None
-        self.last_dir = None
+        self.last_dir_1 = None
+        self.last_dir_2 = None
+
+        # helper dicts
+        self.data_links = {self.le_data_1.objectName(): self.last_dir_1,
+                           self.le_data_2.objectName(): self.last_dir_2}
         
         self.group_scale = QtWidgets.QButtonGroup()
         self.group_scale.addButton(self.rb_scale_1)
@@ -188,9 +185,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self.layout_data_1 = QtWidgets.QGridLayout()
         self.gbox_data_1.setLayout(self.layout_data_1)
         self.le_data_1 = QtWidgets.QLineEdit()
+        self.le_data_1.setObjectName('le_data_1')
         self.layout_data_1.addWidget(self.le_data_1, 0, 0)
         self.tb_data_1 = QtWidgets.QToolButton()
         self.tb_data_1.setText('...')
+        self.tb_data_1.setObjectName('tb_data_1')
         self.tb_data_1.setToolTip('Open file browser')
         self.layout_data_1.addWidget(self.tb_data_1, 0, 1)
         self.la_data_1 = QtWidgets.QLabel('Reflections: 0')
@@ -206,9 +205,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self.layout_data_2 = QtWidgets.QGridLayout()
         self.gbox_data_2.setLayout(self.layout_data_2)
         self.le_data_2 = QtWidgets.QLineEdit()
+        self.le_data_2.setObjectName('le_data_2')
         self.layout_data_2.addWidget(self.le_data_2, 0, 0)
         self.tb_data_2 = QtWidgets.QToolButton()
         self.tb_data_2.setText('...')
+        self.tb_data_2.setObjectName('tb_data_2')
         self.tb_data_2.setToolTip('Open file browser')
         self.layout_data_2.addWidget(self.tb_data_2, 0, 1)
         self.la_data_2 = QtWidgets.QLabel('Reflections: 0')
@@ -289,17 +290,13 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.statusBar = QtWidgets.QStatusBar()
         self.setStatusBar(self.statusBar)
-
-    def update_last_dir(self, aPath):
-        logging.info(self.__class__.__name__)
-        self.last_dir = aPath
     
     def open_file_browser(self, aWidget):
         logging.info(self.__class__.__name__)
-        aPath = QtWidgets.QFileDialog.getOpenFileName(self, 'Open File', self.last_dir, 'SCXRD Data Formats (*.raw, *.fco, *.hkl)', '-')[0]
+        last_dir = self.data_links.get(aWidget.objectName(), self.homedir)
+        aPath = QtWidgets.QFileDialog.getOpenFileName(self, 'Open File', last_dir, 'SCXRD Data Formats (*.raw, *.fco, *.hkl)', '-')[0]
         if not os.path.exists(aPath):
             return
-        self.last_dir = aPath
         aWidget.setText(aPath)
         aWidget.returnPressed.emit()
     
@@ -423,15 +420,28 @@ class MainWindow(QtWidgets.QMainWindow):
                          'QToolButton:disabled {background-color: rgb(220, 200, 200); color: rgb(  0,   0,   0); border: 1px solid rgb( 75,  75,  75)}')
         self.tb_plot.setStyleSheet(self.tb_style)
 
-    def prepare_read_data(self, aPath, aWidget, aFlag):
+    def prepare_read_data_1(self, aPath):
         logging.info(self.__class__.__name__)
         if not os.path.exists(aPath):
             print('invalid path!')
             return
-        aFlag = False
-        aWidget.setEnabled(False)
-        self.thread_run(self.read_data, aPath, parent_widget=aWidget)
-    
+        self.ready_data_1 = False
+        self.data_links[self.le_data_1.objectName()] = aPath
+        self.le_data_1.setEnabled(False)
+        self.tb_data_1.setEnabled(False)
+        self.thread_run(self.read_data, aPath, parent_widget=self.le_data_1)
+
+    def prepare_read_data_2(self, aPath):
+        logging.info(self.__class__.__name__)
+        if not os.path.exists(aPath):
+            print('invalid path!')
+            return
+        self.ready_data_2 = False
+        self.data_links[self.le_data_2.objectName()] = aPath
+        self.le_data_2.setEnabled(False)
+        self.tb_data_2.setEnabled(False)
+        self.thread_run(self.read_data, aPath, parent_widget=self.le_data_2)
+
     def read_data(self, fname, use_columns=None, used_only=True):
         logging.info(self.__class__.__name__)
         '''
@@ -680,10 +690,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self.data = None
         self.data_1 = None
         self.data_2 = None
-        self.last_dir = None
         self.tb_plot.setEnabled(False)
         self.le_data_1.setEnabled(True)
         self.le_data_2.setEnabled(True)
+        self.tb_data_1.setEnabled(True)
+        self.tb_data_2.setEnabled(True)
         
     def on_thread_result(self, r):
         logging.info(self.__class__.__name__)
@@ -733,64 +744,7 @@ def main():
     ui.show()
     sys.exit(app.exec())
 
-class SelectFromCollection(object):
-    """Select indices from a matplotlib collection using `LassoSelector`.
-
-    Selected indices are saved in the `ind` attribute. This tool fades out the
-    points that are not part of the selection (i.e., reduces their alpha
-    values). If your collection has alpha < 1, this tool will permanently
-    alter the alpha values.
-
-    Note that this tool selects collection objects based on their *origins*
-    (i.e., `offsets`).
-
-    Parameters
-    ----------
-    ax : :class:`~matplotlib.axes.Axes`
-        Axes to interact with.
-
-    collection : :class:`matplotlib.collections.Collection` subclass
-        Collection you want to select from.
-
-    alpha_other : 0 <= float <= 1
-        To highlight a selection, this tool sets all selected points to an
-        alpha value of 1 and non-selected points to `alpha_other`.
-    """
-
-    def __init__(self, ax, collection, alpha_other=0.3):
-        self.canvas = ax.figure.canvas
-        self.collection = collection
-        self.alpha_other = alpha_other
-
-        self.xys = collection.get_offsets()
-        self.Npts = len(self.xys)
-
-        # Ensure that we have separate colors for each object
-        self.fc = collection.get_facecolors()
-        if len(self.fc) == 0:
-            raise ValueError('Collection must have a facecolor')
-        elif len(self.fc) == 1:
-            self.fc = np.tile(self.fc, (self.Npts, 1))
-
-        self.lasso = LassoSelector(ax, onselect=self.onselect)
-        self.ind = []
-
-    def onselect(self, verts):
-        path = Path(verts)
-        self.ind = np.nonzero(path.contains_points(self.xys))[0]
-        self.fc[:, -1] = self.alpha_other
-        self.fc[self.ind, -1] = 1
-        self.collection.set_facecolors(self.fc)
-        self.canvas.draw_idle()
-
-    def disconnect(self):
-        self.lasso.disconnect_events()
-        self.fc[:, -1] = 1
-        self.collection.set_facecolors(self.fc)
-        self.canvas.draw_idle()
-
 if __name__ == '__main__':
     # create logger
     logging.basicConfig(level=logging.INFO, format='%(message)20s > %(funcName)s')
     main()
-
