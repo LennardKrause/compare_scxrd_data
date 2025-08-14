@@ -16,7 +16,7 @@
 #   FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
 #   more details. <http://www.gnu.org/licenses/>
 #
-_REVISION = 'v2025-08-14'
+_REVISION = 'v2025-08-13'
 
 # todo:
 # - add support for .fcf files
@@ -289,6 +289,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.layout_h_bottom.addLayout(self.layout_plot_spacer)
 
         self.statusBar = QtWidgets.QStatusBar()
+        self.setStatusBar(self.statusBar)
 
     def update_last_dir(self, aPath):
         logging.info(self.__class__.__name__)
@@ -552,6 +553,20 @@ class MainWindow(QtWidgets.QMainWindow):
         grp = cut.groupby(['base'])[['Fo_1', 'Fo_2']].mean()
         f1cut = grp['Fo_1']
         f2cut = grp['Fo_2']
+        
+        check_1 = f1cut.count()
+        check_2 = f2cut.count()
+        if check_1 != check_2:
+            self.statusBar.showMessage('Data mismatch: {} != {}'.format(check_1, check_2))
+            return
+        if check_1 == 0:
+            self.statusBar.showMessage('No data (1) after sigma cutoff!')
+            return
+        if check_2 == 0:
+            self.statusBar.showMessage('No data (2) after sigma cutoff!')
+            return
+        
+        self.statusBar.showMessage('')
 
         scale = self.ds_scale.value()
         if _SCALE:
@@ -606,7 +621,7 @@ class MainWindow(QtWidgets.QMainWindow):
         p1x.yaxis.set_visible(False)
         
         if self.use_stl:
-            stl = self.data['stl']
+            stl = cut['stl'].dropna()
             p2x.scatter(stl, y, s=20, alpha=0.5, picker=True, color='#37A0CB')
             p2x.plot([np.min(stl), np.max(stl)], [0,0], 'k-', lw=1.0)
             p2x.set_ylabel(r'$(F^2_{1}\ -\ F^2_{2})\ /\ \left<F^2_{1,2}\right>$')
