@@ -16,7 +16,7 @@
 #   FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
 #   more details. <http://www.gnu.org/licenses/>
 #
-_REVISION = 'v2025-08-13'
+_REVISION = 'v2025-08-14'
 
 # todo:
 # - add support for .fcf files
@@ -142,8 +142,8 @@ class MainWindow(QtWidgets.QMainWindow):
         super(MainWindow, self).__init__(*args, **kwargs)
         self.valid_extensions = ['.raw', '.fco', '.hkl', '.sortav']
         self.homedir = os.path.dirname(__file__)
-        uic.loadUi(os.path.join(self.homedir,'CDQt.ui'), self)
-        self.setWindowFlags(self.windowFlags() | QtCore.Qt.WindowType.WindowStaysOnTopHint | QtCore.Qt.WindowType.WindowCloseButtonHint)
+
+        self.build_ui()
         
         self.le_data_1.installEventFilter(QLineEditDropHandler(self))
         self.le_data_2.installEventFilter(QLineEditDropHandler(self))
@@ -151,11 +151,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self.le_data_1.returnPressed.connect(lambda: self.update_last_dir(self.le_data_1.text()))
         self.le_data_2.returnPressed.connect(lambda: self.prepare_read_data(self.le_data_2.text(), self.le_data_2, self.ready_data_2))
         self.le_data_2.returnPressed.connect(lambda: self.update_last_dir(self.le_data_2.text()))
-        self.tb_plot.pressed.connect(self.plot_data)
-        self.tb_data_1.pressed.connect(lambda: self.open_file_browser(self.le_data_1))
-        self.tb_data_2.pressed.connect(lambda: self.open_file_browser(self.le_data_2))
-        self.cb_sym.currentTextChanged.connect(self.set_symmetry_operations)
-        self.btn_clear.pressed.connect(self.clear_all)
+        self.tb_plot.clicked.connect(self.plot_data)
+        self.tb_data_1.clicked.connect(lambda: self.open_file_browser(self.le_data_1))
+        self.tb_data_2.clicked.connect(lambda: self.open_file_browser(self.le_data_2))
+        self.cb_sym.currentIndexChanged.connect(self.set_symmetry_operations)
+        self.btn_clear.clicked.connect(self.clear_all)
         
         self.threadpool = QtCore.QThreadPool()
         self.ready_data = False
@@ -172,7 +172,124 @@ class MainWindow(QtWidgets.QMainWindow):
         
         self.init_custom_styles()
         self.init_symmetry()
+
+    def build_ui(self):
+        # apply palette to app
+        self.setWindowFlags(self.windowFlags() | QtCore.Qt.WindowType.WindowStaysOnTopHint | QtCore.Qt.WindowType.WindowCloseButtonHint)
+        app = QtWidgets.QApplication.instance()
+        app.setStyle('Fusion')
+
+        logging.info(self.__class__.__name__)
+        self.setWindowTitle('SCXRD Data Compare {}'.format(_REVISION))
+        self.layout_v_main = QtWidgets.QVBoxLayout()
+        self.layout_h_top = QtWidgets.QHBoxLayout()
+        self.layout_h_bottom = QtWidgets.QHBoxLayout()
+
+        self.gbox_data_1 = QtWidgets.QGroupBox('Data 1', alignment=QtCore.Qt.AlignmentFlag.AlignCenter)
+        self.layout_data_1 = QtWidgets.QGridLayout()
+        self.gbox_data_1.setLayout(self.layout_data_1)
+        self.le_data_1 = QtWidgets.QLineEdit()
+        self.layout_data_1.addWidget(self.le_data_1, 0, 0)
+        self.tb_data_1 = QtWidgets.QToolButton()
+        self.tb_data_1.setText('...')
+        self.tb_data_1.setToolTip('Open file browser')
+        self.layout_data_1.addWidget(self.tb_data_1, 0, 1)
+        self.la_data_1 = QtWidgets.QLabel('Reflections: 0')
+        self.la_data_1.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        self.layout_data_1.addWidget(self.la_data_1, 1, 0, 1, 2)
+        self.le_label_1 = QtWidgets.QLineEdit('1')
+        self.le_label_1.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        self.layout_data_1.addWidget(self.le_label_1, 2, 0)
+        self.la_label_1 = QtWidgets.QLabel('Label')
+        self.layout_data_1.addWidget(self.la_label_1, 2, 1)
+
+        self.gbox_data_2 = QtWidgets.QGroupBox('Data 2', alignment=QtCore.Qt.AlignmentFlag.AlignCenter)
+        self.layout_data_2 = QtWidgets.QGridLayout()
+        self.gbox_data_2.setLayout(self.layout_data_2)
+        self.le_data_2 = QtWidgets.QLineEdit()
+        self.layout_data_2.addWidget(self.le_data_2, 0, 0)
+        self.tb_data_2 = QtWidgets.QToolButton()
+        self.tb_data_2.setText('...')
+        self.tb_data_2.setToolTip('Open file browser')
+        self.layout_data_2.addWidget(self.tb_data_2, 0, 1)
+        self.la_data_2 = QtWidgets.QLabel('Reflections: 0')
+        self.la_data_2.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        self.layout_data_2.addWidget(self.la_data_2, 1, 0, 1, 2)
+        self.le_label_2 = QtWidgets.QLineEdit('2')
+        self.le_label_2.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        self.layout_data_2.addWidget(self.le_label_2, 2, 0)
+        self.la_label_2 = QtWidgets.QLabel('Label')
+        self.layout_data_2.addWidget(self.la_label_2, 2, 1)
         
+        self.gbox_symmetry = QtWidgets.QGroupBox('Symmetry', alignment=QtCore.Qt.AlignmentFlag.AlignCenter)
+        self.layout_symmetry = QtWidgets.QGridLayout()
+        self.gbox_symmetry.setLayout(self.layout_symmetry)
+        self.cb_sym = QtWidgets.QComboBox()
+        self.layout_symmetry.addWidget(self.cb_sym, 0, 0, 1, 2)
+        self.la_data_sym = QtWidgets.QLabel('-')
+        self.la_data_sym.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        self.layout_symmetry.addWidget(self.la_data_sym, 1, 0, 1, 2)
+        self.le_prefix = QtWidgets.QLineEdit('')
+        self.le_prefix.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        self.la_prefix = QtWidgets.QLabel('Prefix')
+        self.layout_symmetry.addWidget(self.le_prefix, 2, 0)
+        self.layout_symmetry.addWidget(self.la_prefix, 2, 1)
+
+        self.gbox_plot = QtWidgets.QGroupBox('Plot', alignment=QtCore.Qt.AlignmentFlag.AlignCenter)
+        self.layout_plot = QtWidgets.QGridLayout()
+        self.gbox_plot.setLayout(self.layout_plot)
+        self.tb_plot = QtWidgets.QToolButton(text='Plot')
+        self.tb_plot.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Expanding)
+        self.db_sigcut = QtWidgets.QDoubleSpinBox()
+        self.db_sigcut.setRange(0.0, 100.0)
+        self.db_sigcut.setSingleStep(0.1)
+        self.db_sigcut.setValue(0.5)
+        self.db_sigcut.setToolTip('Sigma cutoff')
+        self.la_sigcut = QtWidgets.QLabel('Sigcut')
+        self.la_scale = QtWidgets.QLabel('Auto')
+        self.rb_scale_1 = QtWidgets.QRadioButton()
+        self.ds_scale = QtWidgets.QDoubleSpinBox()
+        self.ds_scale.setRange(0.0, 100.0)
+        self.ds_scale.setDecimals(3)
+        self.ds_scale.setSingleStep(0.001)
+        self.ds_scale.setValue(1.0)
+        self.rb_scale_2 = QtWidgets.QRadioButton()
+        self.rb_scale_1.setChecked(True)
+        self.rb_scale_1.setAutoExclusive(True)
+        self.rb_scale_2.setAutoExclusive(True)
+        self.cb_save = QtWidgets.QCheckBox('Save')
+        self.cb_title = QtWidgets.QCheckBox('Title')
+        self.btn_clear = QtWidgets.QToolButton(text='Clear')
+        self.btn_clear.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
+        self.layout_plot.addWidget(self.tb_plot, 0, 0, 5, 1)
+        self.layout_plot.addWidget(self.db_sigcut, 0, 1)
+        self.layout_plot.addWidget(self.la_sigcut, 0, 2)
+        self.layout_plot.addWidget(self.la_scale, 1, 1)
+        self.layout_plot.addWidget(self.rb_scale_1, 1, 2)
+        self.layout_plot.addWidget(self.ds_scale, 2, 1)
+        self.layout_plot.addWidget(self.rb_scale_2, 2, 2)
+        self.layout_plot.addWidget(self.cb_save, 3, 1)
+        self.layout_plot.addWidget(self.cb_title, 4, 1)
+        self.layout_plot.addWidget(self.btn_clear, 5, 0, 1, 3)
+
+        centralwidget = QtWidgets.QWidget()
+        centralwidget.setLayout(self.layout_v_main)
+        self.setCentralWidget(centralwidget)
+
+        self.layout_v_main.addLayout(self.layout_h_top)
+        self.layout_v_main.addLayout(self.layout_h_bottom)
+        self.layout_h_top.addWidget(self.gbox_data_1)
+        self.layout_h_top.addWidget(self.gbox_symmetry)
+        self.layout_h_top.addWidget(self.gbox_data_2)
+        
+        self.layout_plot_spacer = QtWidgets.QHBoxLayout()
+        self.layout_plot_spacer.addStretch()
+        self.layout_plot_spacer.addWidget(self.gbox_plot)
+        self.layout_plot_spacer.addStretch()
+        self.layout_h_bottom.addLayout(self.layout_plot_spacer)
+
+        self.statusBar = QtWidgets.QStatusBar()
+
     def update_last_dir(self, aPath):
         logging.info(self.__class__.__name__)
         self.last_dir = aPath
@@ -189,6 +306,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def init_symmetry(self):
         logging.info(self.__class__.__name__)
         self.Symmetry = {  '1':np.array([[[  1,  0,  0],[  0,  1,  0],[  0,  0,  1]]]),
+                         
                           '-1':np.array([[[  1,  0,  0],[  0,  1,  0],[  0,  0,  1]],
                                          [[ -1,  0,  0],[  0, -1,  0],[  0,  0, -1]]]),
                          
@@ -287,14 +405,14 @@ class MainWindow(QtWidgets.QMainWindow):
                                          [[  0,  0,  1],[  0,  1,  0],[  1,  0,  0]]])}
         
         [self.cb_sym.addItem(i) for i in sorted(self.Symmetry.keys())]
-        self.cb_sym.setCurrentText('1')
+        self.cb_sym.setCurrentText('-1')
     
     def set_symmetry_operations(self):
         logging.info(self.__class__.__name__)
         self.SymOp = self.Symmetry[self.cb_sym.currentText()]
-        self.la_data_sym.setText('-')
+        self.la_data_sym.setText('Unique: 0')
         if self.ready_data_1 and self.ready_data_2:
-            self.merge_data()
+            self.thread_run(self.merge_data, flag='ready_data_all')
         
     def init_custom_styles(self):
         logging.info(self.__class__.__name__)
@@ -376,9 +494,14 @@ class MainWindow(QtWidgets.QMainWindow):
         self.data_1['base'] = self.data_1[['h','k','l']].apply(reducehkltofam, args=(self.SymOp,), axis=1)
         self.data_2['base'] = self.data_2[['h','k','l']].apply(reducehkltofam, args=(self.SymOp,), axis=1)
         
-        self.data = self.data_1.merge(self.data_2, how='inner', on=['base','h','k','l'], suffixes=('_1','_2'), indicator=True)
-        self.la_data_sym.setText(str(len(set(self.data['base']))))
-        
+        self.data = pd.merge(self.data_1, self.data_2, how='outer', on='base', suffixes=('_1','_2'))
+        self.data.dropna(axis=0, how='any', inplace=True)
+
+        nunique = self.data.groupby(['base']).nunique()
+        unique = len(nunique)
+        total = nunique[['Fo_1', 'Fo_2']].sum(axis=1).sum()
+        self.la_data_sym.setText(f'Unique: {unique} ({total})')
+
         if 'stl_1' not in self.data.columns and 'stl_2' not in self.data.columns:
             self.use_stl = False
         else:
@@ -421,20 +544,21 @@ class MainWindow(QtWidgets.QMainWindow):
             grid = plt.GridSpec(7, 13, wspace=0.0, hspace=0.0)
         fig.subplots_adjust(left=0.08, right=0.98, top=0.9, bottom=0.08, wspace=0.0, hspace=0.0)
         
-        cond1 = self.data['Fo_1']/self.data['Fs_1'] > _SIGCUT
-        cond2 = self.data['Fo_2']/self.data['Fs_2'] > _SIGCUT
+        # apply sigma cutoff
+        cond1 = self.data['Fo_1']/self.data['Fs_1'] >= _SIGCUT
+        cond2 = self.data['Fo_2']/self.data['Fs_2'] >= _SIGCUT
         cut = self.data.where(cond1 & cond2)
-        grp = cut.groupby(['base'])
-        f1cut = grp['Fo_1'].transform('mean')
-        f2cut = grp['Fo_2'].transform('mean')
+        # group by base and calculate mean
+        grp = cut.groupby(['base'])[['Fo_1', 'Fo_2']].mean()
+        f1cut = grp['Fo_1']
+        f2cut = grp['Fo_2']
 
-        sigcut = _SIGCUT
         scale = self.ds_scale.value()
         if _SCALE:
             scale = np.nansum(f1cut*f2cut)/np.nansum(np.square(f1cut))
         
         if _TITLE:
-            fig.suptitle('Scalefactor: {:6.3f}, cutoff: {} [data: {}], symmetry: {}\n1: {}\n2: {}'.format(scale, sigcut, cut['Fo_1'].count(), self.cb_sym.currentText(), _FILE_1, _FILE_2))
+            fig.suptitle('Scalefactor: {:6.3f}, cutoff: {} [data: {}], symmetry: {}\n1: {}\n2: {}'.format(scale, _SIGCUT, cut['Fo_1'].count(), self.cb_sym.currentText(), _FILE_1, _FILE_2))
             fig.subplots_adjust(left=0.10, right=0.99, top=0.85, bottom=0.12)
         
         f1cut *= scale
@@ -523,7 +647,7 @@ class MainWindow(QtWidgets.QMainWindow):
         h1x.set_xlabel(r'$\log\left(\left<F^2_{{{{{0:}}},{{{1:}}}}}\right>\right)$'.format(_LABEL_1, _LABEL_2))
         
         if _SAVE:
-            pname = r'{}_{}_vs_{}_c{}_s{}'.format(_PREFIX, _LABEL_1.replace('\\', ''), _LABEL_2.replace('\\', ''), sigcut, scale)
+            pname = r'{}_{}_vs_{}_c{}_s{}'.format(_PREFIX, _LABEL_1.replace('\\', ''), _LABEL_2.replace('\\', ''), _SIGCUT, scale)
             fig.savefig(os.path.join(self.homedir, f'{pname}.png'), transparent=True)
             #plt.savefig(os.path.join(self.homedir, f'{pname}.png'), transparent=True)
             #plt.savefig(pname + '.png', dpi=600, transparent=True)
@@ -533,9 +657,9 @@ class MainWindow(QtWidgets.QMainWindow):
     def clear_all(self):
         self.le_data_1.clear()
         self.le_data_2.clear()
-        self.la_data_1.setText('-')
-        self.la_data_2.setText('-')
-        self.la_data_sym.setText('-')
+        self.la_data_1.setText('Reflections: 0')
+        self.la_data_2.setText('Reflections: 0')
+        self.la_data_sym.setText('Unique: 0')
         self.ready_data = False
         self.ready_data_1 = False
         self.ready_data_2 = False
@@ -572,7 +696,6 @@ class MainWindow(QtWidgets.QMainWindow):
         if 'flag' in kwargs and kwargs['flag'] == 'ready_data_all' and self.threadpool.activeThreadCount() == 0:
             self.tb_plot.setEnabled(True)
             self.cb_sym.setEnabled(True)
-            self.la_data_sym.setText(str(len(set(self.data['base']))))
     
     def thread_run(self, fn, *args, **kwargs):
         logging.info(self.__class__.__name__)
