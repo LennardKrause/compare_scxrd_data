@@ -259,6 +259,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.rb_scale_2.setAutoExclusive(True)
         self.cb_save = QtWidgets.QCheckBox('Save')
         self.cb_title = QtWidgets.QCheckBox('Title')
+        self.cb_title.setChecked(True)
         self.btn_clear = QtWidgets.QToolButton(text='Clear')
         self.btn_clear.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
         self.layout_plot.addWidget(self.tb_plot, 0, 0, 5, 1)
@@ -566,13 +567,13 @@ class MainWindow(QtWidgets.QMainWindow):
         check_1 = f1cut.count()
         check_2 = f2cut.count()
         if check_1 != check_2:
-            self.statusBar.showMessage('Data mismatch: {} != {}'.format(check_1, check_2))
+            self.statusBar.showMessage(f'Data mismatch: {check_1} != {check_2}')
             return
         if check_1 == 0:
-            self.statusBar.showMessage('No data (1) after sigma cutoff!')
+            self.statusBar.showMessage(f'No data ({_LABEL_1}) after sigma cutoff!')
             return
         if check_2 == 0:
-            self.statusBar.showMessage('No data (2) after sigma cutoff!')
+            self.statusBar.showMessage(f'No data ({_LABEL_2}) after sigma cutoff!')
             return
         
         self.statusBar.showMessage('')
@@ -582,7 +583,7 @@ class MainWindow(QtWidgets.QMainWindow):
             scale = np.nansum(f1cut*f2cut)/np.nansum(np.square(f1cut))
         
         if _TITLE:
-            fig.suptitle('Scalefactor: {:6.3f}, cutoff: {} [data: {}], symmetry: {}\n1: {}\n2: {}'.format(scale, _SIGCUT, cut['Fo_1'].count(), self.cb_sym.currentText(), _FILE_1, _FILE_2))
+            fig.suptitle(f'Scalefactor: {scale:6.3f}, cutoff: {_SIGCUT} [data: {cut["Fo_1"].count()}], symmetry: {self.cb_sym.currentText()}\n{_LABEL_1}: {_FILE_1}\n{_LABEL_2}: {_FILE_2}')
             fig.subplots_adjust(left=0.10, right=0.99, top=0.85, bottom=0.12)
         
         f1cut *= scale
